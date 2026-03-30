@@ -9,6 +9,22 @@ import FormattedDate from '../../components/FormattedDate.astro';
 const posts = (await getCollection('blog')).sort(
 	(a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf(),
 );
+
+// Group posts by category
+const categoryMap = new Map<string, typeof posts>();
+for (const post of posts) {
+	const cats = post.data.categories ?? ['Uncategorized'];
+	for (const cat of cats) {
+		if (!categoryMap.has(cat)) {
+			categoryMap.set(cat, []);
+		}
+		categoryMap.get(cat)!.push(post);
+	}
+}
+
+// Sort categories by post count (descending)
+const categories = [...categoryMap.entries()].sort((a, b) => b[1].length - a[1].length);
+const categoryNames = categories.map(([name]) => name);
 ---
 
 <!doctype html>
@@ -19,37 +35,82 @@ const posts = (await getCollection('blog')).sort(
 			main {
 				width: 960px;
 			}
-			ul {
+			/* Filter tabs */
+			.category-filters {
 				display: flex;
 				flex-wrap: wrap;
-				gap: 2rem;
+				gap: 0.5rem;
+				margin-bottom: 2rem;
+				padding: 0;
+				list-style: none;
+			}
+			.category-filters button {
+				padding: 0.4rem 1rem;
+				border: 1px solid rgb(var(--gray-light));
+				border-radius: 2rem;
+				background: #fff;
+				color: rgb(var(--gray-dark));
+				font-size: 0.9rem;
+				font-family: inherit;
+				cursor: pointer;
+				transition: all 0.2s ease;
+			}
+			.category-filters button:hover {
+				border-color: var(--accent);
+				color: var(--accent);
+			}
+			.category-filters button.active {
+				background: var(--accent);
+				border-color: var(--accent);
+				color: #fff;
+			}
+			/* Category section */
+			.category-section {
+				margin-bottom: 2.5rem;
+			}
+			.category-section.hidden {
+				display: none;
+			}
+			.category-header {
+				display: flex;
+				align-items: center;
+				gap: 0.75rem;
+				margin-bottom: 1rem;
+				padding-bottom: 0.5rem;
+				border-bottom: 2px solid rgb(var(--gray-light));
+			}
+			.category-header h2 {
+				margin: 0;
+				font-size: 1.5rem;
+			}
+			.category-count {
+				background: rgb(var(--gray-light));
+				color: rgb(var(--gray));
+				font-size: 0.8rem;
+				padding: 0.15rem 0.6rem;
+				border-radius: 1rem;
+			}
+			/* Post list */
+			.post-list {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 1.5rem;
 				list-style-type: none;
 				margin: 0;
 				padding: 0;
 			}
-			ul li {
-				width: calc(50% - 1rem);
+			.post-list li {
+				width: calc(50% - 0.75rem);
 			}
-			ul li * {
+			.post-list li * {
 				text-decoration: none;
 				transition: 0.2s ease;
 			}
-			ul li:first-child {
-				width: 100%;
-				margin-bottom: 1rem;
-				text-align: center;
-			}
-			ul li:first-child img {
-				width: 100%;
-			}
-			ul li:first-child .title {
-				font-size: 2.369rem;
-			}
-			ul li img {
+			.post-list li img {
 				margin-bottom: 0.5rem;
 				border-radius: 12px;
 			}
-			ul li a {
+			.post-list li a {
 				display: block;
 			}
 			.title {
@@ -61,26 +122,20 @@ const posts = (await getCollection('blog')).sort(
 				margin: 0;
 				color: rgb(var(--gray));
 			}
-			ul li a:hover h4,
-			ul li a:hover .date {
+			.post-list li a:hover h4,
+			.post-list li a:hover .date {
 				color: rgb(var(--accent));
 			}
-			ul a:hover img {
+			.post-list a:hover img {
 				box-shadow: var(--box-shadow);
 			}
 			@media (max-width: 720px) {
-				ul {
+				.post-list {
 					gap: 0.5em;
 				}
-				ul li {
+				.post-list li {
 					width: 100%;
 					text-align: center;
-				}
-				ul li:first-child {
-					margin-bottom: 0;
-				}
-				ul li:first-child .title {
-					font-size: 1.563em;
 				}
 			}
 		</style>
@@ -88,24 +143,65 @@ const posts = (await getCollection('blog')).sort(
 	<body>
 		<Header />
 		<main>
-			<section>
-				<ul>
-					{
-						posts.map((post) => (
+			<!-- Category filter tabs -->
+			<div class="category-filters">
+				<button class="active" data-category="all">All</button>
+				{categoryNames.map((name) => (
+					<button data-category={name}>{name} ({categoryMap.get(name)!.length})</button>
+				))}
+			</div>
+
+			<!-- Category sections -->
+			{categories.map(([category, catPosts]) => (
+				<section class="category-section" data-category={category}>
+					<div class="category-header">
+						<h2>{category}</h2>
+						<span class="category-count">{catPosts.length} posts</span>
+					</div>
+					<ul class="post-list">
+						{catPosts.map((post) => (
 							<li>
 								<a href={`/blog/${post.id}/`}>
-									<img width={720} height={360} src={post.data.heroImage} alt="" />
+									{post.data.heroImage && (
+										<img width={720} height={360} src={post.data.heroImage} alt="" />
+									)}
 									<h4 class="title">{post.data.title}</h4>
 									<p class="date">
 										<FormattedDate date={post.data.pubDate} />
 									</p>
 								</a>
 							</li>
-						))
-					}
-				</ul>
-			</section>
+						))}
+					</ul>
+				</section>
+			))}
 		</main>
 		<Footer />
+
+		<script>
+			document.addEventListener('astro:page-load', () => {
+				const buttons = document.querySelectorAll<HTMLButtonElement>('.category-filters button');
+				const sections = document.querySelectorAll<HTMLElement>('.category-section');
+
+				buttons.forEach((btn) => {
+					btn.addEventListener('click', () => {
+						const cat = btn.dataset.category;
+
+						// Update active button
+						buttons.forEach((b) => b.classList.remove('active'));
+						btn.classList.add('active');
+
+						// Show/hide sections
+						sections.forEach((section) => {
+							if (cat === 'all' || section.dataset.category === cat) {
+								section.classList.remove('hidden');
+							} else {
+								section.classList.add('hidden');
+							}
+						});
+					});
+				});
+			});
+		</script>
 	</body>
 </html>
